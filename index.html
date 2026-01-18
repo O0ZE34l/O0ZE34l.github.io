@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="theme-color" content="#0a0b0f"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <title>Hangout BETA</title>
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="data:application/manifest+json,{
+    \"name\": \"Hangout BETA\",
+    \"short_name\": \"Hangout\",
+    \"start_url\": \".\",
+    \"display\": \"standalone\",
+    \"background_color\": \"#0a0b0f\",
+    \"theme_color\": \"#6366f1\",
+    \"icons\": [
+      {\"src\": \"https://via.placeholder.com/192x192/6366f1/ffffff?text=HB\",\"sizes\": \"192x192\",\"type\": \"image/png\"},
+      {\"src\": \"https://via.placeholder.com/512x512/6366f1/ffffff?text=HB\",\"sizes\": \"512x512\",\"type\": \"image/png\"}
+    ]
+  }"/>
+
+  <style>
+    :root {
+      --bg: #0a0b0f;
+      --sidebar: #111318;
+      --card: #1a1e25;
+      --text: #e5e7eb;
+      --accent: #6366f1;
+      --green: #10b981;
+      --red: #ef4444;
+      --shadow: 0 8px 24px rgba(0,0,0,0.55);
+    }
+    body.light-mode {
+      --bg: #f3f4f6;
+      --sidebar: #e5e7eb;
+      --card: #ffffff;
+      --text: #111827;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:system-ui, sans-serif; background:var(--bg); color:var(--text); height:100dvh; overflow:hidden; display:flex; transition:background 0.3s, color 0.3s; }
+    #sidebar {
+      width:280px; background:var(--sidebar); border-right:1px solid #1e222b; padding:16px; overflow-y:auto;
+      position:fixed; inset:0 auto 0 0; z-index:200; transform:translateX(-100%); transition:transform 0.35s cubic-bezier(0.16,1,0.3,1);
+    }
+    #sidebar.open { transform:translateX(0); }
+    #main { flex:1; display:flex; flex-direction:column; }
+    #video-area {
+      flex:1; position:relative; background:radial-gradient(circle at 50% 50%, #0f1117, #0a0b0f);
+      display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px; padding:16px; overflow:auto;
+    }
+    body.light-mode #video-area { background:radial-gradient(circle at 50% 50%, #e5e7eb, #f3f4f6); }
+    .video-tile {
+      border-radius:12px; overflow:hidden; background:#000; box-shadow:var(--shadow);
+      aspect-ratio: 16/9; width:100%; max-width:600px; position:relative;
+    }
+    .self-preview {
+      position: fixed;
+      bottom: 100px;
+      right: 16px;
+      width: 160px;
+      height: 120px;
+      z-index: 50;
+      border: 3px solid var(--accent);
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+      overflow: hidden;
+      background: #000;
+    }
+    .self-preview video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      display: block;
+    }
+    .error-overlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.75); color: #ff6b6b; font-size: 0.78rem;
+      display: none; place-items: center; text-align: center; padding: 8px; pointer-events: none;
+    }
+    .avatar-placeholder {
+      position: absolute; inset: 0; background: #1a1e25; display: flex; align-items: center; justify-content: center;
+    }
+    .avatar-letter {
+      width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 5.2rem; font-weight: bold; color: white;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      text-transform: uppercase;
+      box-shadow: inset 0 0 25px rgba(0,0,0,0.5);
+    }
+    .placeholder {
+      position:absolute; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; color:#6b7280; font-size:1.2rem; gap:16px; background:rgba(0,0,0,0.4);
+    }
+    #bottom-bar { height:80px; background:rgba(17,19,24,0.95); backdrop-filter:blur(12px); border-top:1px solid #1e222b; display:flex; justify-content:center; align-items:center; gap:24px; z-index:60; }
+    .control-btn { width:56px; height:56px; border-radius:50%; border:none; font-size:1.6rem; cursor:pointer; transition:all 0.18s; color:white; }
+    .control-btn:active { transform:scale(0.92); }
+    .cam-on { background:var(--green); }
+    .cam-off { background:var(--red); }
+    .hangup { background:var(--red); }
+    .menu-toggle { position:fixed; top:12px; left:12px; z-index:300; width:48px; height:48px; border-radius:50%; background:var(--accent); color:white; font-size:1.5rem; border:none; box-shadow:0 4px 15px rgba(99,102,241,0.35); }
+    .sidebar-btn { 
+      width: 100%; 
+      padding: 12px; 
+      border-radius: 8px; 
+      border: none; 
+      color: white; 
+      font-size: 1rem; 
+      font-weight: 500; 
+      cursor: pointer; 
+      transition: all 0.2s ease; 
+      margin: 6px 0;
+    }
+    .sidebar-btn:hover { opacity: 0.92; transform: translateY(-1px); }
+    .sidebar-btn:active { transform: scale(0.98); }
+    .card { background:var(--card); border-radius:12px; padding:12px; margin:12px 0; }
+    .modal { position:fixed; inset:0; background:rgba(0,0,0,0.88); display:none; place-items:center; z-index:1000; padding:16px; }
+    .modal-box { background:#15181d; padding:28px; border-radius:16px; width:100%; max-width:420px; box-shadow:var(--shadow); max-height:90vh; overflow-y:auto; }
+    .install-btn {
+      background: #4f46e5;
+      color: white;
+      font-weight: bold;
+      padding: 16px;
+      border-radius: 12px;
+      text-align: center;
+      cursor: pointer;
+      margin: 16px 0;
+      box-shadow: 0 4px 16px rgba(79,70,229,0.5);
+      transition: all 0.2s;
+    }
+    .install-btn:hover { background: #4338ca; transform: translateY(-2px); }
+    .settings-item { margin:16px 0; display:flex; justify-content:space-between; align-items:center; font-size:0.95rem; }
+    .settings-toggle { width:48px; height:24px; background:#374151; border-radius:12px; position:relative; cursor:pointer; }
+    .settings-toggle::after { content:''; position:absolute; width:20px; height:20px; background:white; border-radius:50%; top:2px; left:2px; transition:0.3s; }
+    .settings-toggle.active { background:var(--green); }
+    .settings-toggle.active::after { left:calc(100% - 22px); }
+    .member-item { display:flex; justify-content:space-between; align-items:center; padding:10px; background:#222; border-radius:8px; margin:6px 0; }
+    @media (min-width:900px) {
+      body { flex-direction:row; }
+      #sidebar { position:static; transform:none; width:280px; }
+      .menu-toggle { display:none; }
+      .self-preview { width:200px; height:150px; bottom:110px; right:24px; }
+      .avatar-letter { font-size: 6.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<button class="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+
+<div id="sidebar">
+  <h2>Hangout BETA</h2>
+
+  <!-- New prominent buttons -->
+  <button class="sidebar-btn" 
+          onclick="window.open('https://padlet.com/O0ZE34/id-sharing-jfwe0dpoc856zkr6', '_blank')"
+          style="background: linear-gradient(90deg, #8b5cf6, #c084fc); font-weight:600;">
+    Share your ID with friends! ✧
+  </button>
+
+  <button class="sidebar-btn" 
+          onclick="window.open('https://oozehangoutsystem.global.ssl.fastly.net/', '_blank')"
+          style="background: linear-gradient(90deg, #ec4899, #f472b6); font-weight:600;">
+    Version 1 ↗
+  </button>
+
+  <div class="card">
+    <input type="text" id="username" placeholder="Your Name" style="width:100%; padding:12px; border-radius:8px; border:none; background:#222; color:white; margin-bottom:10px;">
+    <button onclick="saveName()" class="sidebar-btn" style="background:var(--accent);">Save Name</button>
+  </div>
+
+  <div class="card">
+    <input type="text" id="callTarget" placeholder="Friend's Peer ID" style="width:100%; padding:12px; border-radius:8px; border:none; background:#222; color:white; margin-bottom:10px;">
+    <button onclick="startCall()" class="sidebar-btn" style="background:var(--green);">Call</button>
+  </div>
+
+  <div class="card">
+    <div>Your ID: <strong id="myId">loading...</strong></div>
+    <button onclick="copyMyId()" class="sidebar-btn" style="margin:10px 0; background:#4f46e5;">Copy ID</button>
+  </div>
+
+  <div class="card">
+    <button onclick="document.getElementById('contactsModal').style.display='flex'; renderContacts()" class="sidebar-btn" style="background:var(--green);">Contacts</button>
+  </div>
+
+  <div class="card">
+    <button onclick="document.getElementById('settingsModal').style.display='flex'" class="sidebar-btn" style="background:var(--accent);">Settings ⚙️</button>
+  </div>
+
+  <div style="margin-top:24px; text-align:center; font-size:0.8rem; opacity:0.6;">
+    Hangout BETA • Made in Houston
+  </div>
+</div>
+
+<div id="main">
+  <div id="video-area">
+    <div id="placeholder" class="placeholder">
+      <div class="placeholder-icon">▶</div>
+      <div>Waiting for connection...</div>
+    </div>
+  </div>
+
+  <div id="local-tile" class="self-preview">
+    <video id="local-video" autoplay playsinline muted></video>
+    <div id="local-error" class="error-overlay">Camera access denied or unavailable</div>
+    <div id="local-avatar" class="avatar-placeholder" style="display:flex;">
+      <div class="avatar-letter" id="avatar-letter">Y</div>
+    </div>
+  </div>
+
+  <div id="bottom-bar">
+    <button class="control-btn" onclick="toggleMute()">🔇</button>
+    <button id="camBtn" class="control-btn cam-on" onclick="toggleCamera()">📷</button>
+    <button class="control-btn hangup" onclick="resetCall()">📞</button>
+  </div>
+</div>
+
+<!-- Incoming Call Modal -->
+<div id="incoming" class="modal">
+  <div class="modal-box">
+    <h2>Incoming Call</h2>
+    <p id="callerName" style="font-size:1.8rem;margin:1.6rem 0;">...</p>
+    <div style="display:flex;gap:40px;justify-content:center;">
+      <button onclick="acceptCall()" style="background:var(--green);color:white;padding:14px 60px;border:none;border-radius:10px;">Accept</button>
+      <button onclick="declineCall()" style="background:var(--red);color:white;padding:14px 60px;border:none;border-radius:10px;">Decline</button>
+    </div>
+  </div>
+</div>
+
+<!-- Contacts Modal -->
+<div id="contactsModal" class="modal">
+  <div class="modal-box">
+    <h2>Contacts</h2>
+    <div id="contacts-list" style="margin:16px 0;min-height:100px;"></div>
+    <input type="text" id="newContactName" placeholder="Name" style="width:100%;padding:10px;margin-bottom:8px;border-radius:8px;border:none;background:#222;color:white;">
+    <input type="text" id="newContactId" placeholder="Peer ID" style="width:100%;padding:10px;margin-bottom:12px;border-radius:8px;border:none;background:#222;color:white;">
+    <button onclick="addContact()" class="sidebar-btn" style="background:var(--green);">Add</button>
+    <button onclick="document.getElementById('contactsModal').style.display='none'" class="sidebar-btn" style="background:var(--accent);">Close</button>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModal" class="modal">
+  <div class="modal-box">
+    <h2>Settings</h2>
+    <div class="settings-item">
+      <span>Dark Mode</span>
+      <div class="settings-toggle active" id="darkModeToggle" onclick="document.body.classList.toggle('light-mode'); this.classList.toggle('active');"></div>
+    </div>
+    <div class="settings-item">
+      <span>Mirror My Camera Preview</span>
+      <div class="settings-toggle" id="mirrorToggle" onclick="document.getElementById('local-tile').classList.toggle('mirrored'); this.classList.toggle('active');"></div>
+    </div>
+    <div class="settings-item">
+      <span>Show "Waiting" Placeholder</span>
+      <div class="settings-toggle active" id="placeholderToggle" onclick="document.getElementById('placeholder').style.display = this.classList.toggle('active') ? 'flex' : 'none';"></div>
+    </div>
+    <div class="settings-item">
+      <span>Auto-Accept Incoming Calls</span>
+      <div class="settings-toggle" id="autoAcceptToggle" onclick="this.classList.toggle('active');"></div>
+    </div>
+
+    <div style="margin-top:24px;">
+      <div class="install-btn" onclick="alert('Chrome install prompt should appear now!\\n\\nIf nothing shows:\\n1. Click the 3-dot menu (top right)\\n2. Choose \"Install Hangout BETA\" or \"Add to Chrome\"\\n\\nBest when opened via http:// or https://')">
+        Add to Chromebook / Install App
+      </div>
+      <button onclick="if(confirm('Reset all saved data?')) localStorage.clear(),location.reload()" class="sidebar-btn" style="background:var(--red); width:100%; margin-bottom:12px;">Reset All Data (Name, ID, Contacts)</button>
+    </div>
+
+    <div style="margin-top:24px; text-align:center; font-size:0.85rem; opacity:0.7;">
+      Hangout BETA v1.2 • January 18, 2026<br>
+      Made by ooze34 • watkns scks
+    </div>
+
+    <button onclick="document.getElementById('settingsModal').style.display='none'" class="sidebar-btn" style="margin-top:20px;background:var(--accent); width:100%;">Close</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+// State
+let peer, localStream = null, currentCall = null;
+let myName = localStorage.getItem('hangout_name') || 'You';
+let myPeerId = localStorage.getItem('hangout_peer_id');
+let contacts = JSON.parse(localStorage.getItem('hangout_contacts')) || [];
+
+// Persistent Peer ID
+if (!myPeerId) {
+  myPeerId = 'hgo-' + Math.random().toString(36).substring(2,13);
+  localStorage.setItem('hangout_peer_id', myPeerId);
+}
+
+document.getElementById('myId').textContent = myPeerId;
+document.getElementById('username').value = myName;
+updateAvatarLetter();
+
+// Name & Avatar
+function saveName() {
+  myName = document.getElementById('username').value.trim() || 'You';
+  localStorage.setItem('hangout_name', myName);
+  updateAvatarLetter();
+}
+
+function updateAvatarLetter() {
+  const letter = (myName.charAt(0) || 'Y').toUpperCase();
+  document.getElementById('avatar-letter').textContent = letter;
+}
+
+function copyMyId() {
+  navigator.clipboard.writeText(myPeerId);
+  alert('Copied!');
+}
+
+// Contacts
+function renderContacts() {
+  const list = document.getElementById('contacts-list');
+  list.innerHTML = '';
+  contacts.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'member-item';
+    div.innerHTML = `<span>${c.name}</span>
+      <button onclick="callContact('${c.id}')" class="sidebar-btn" style="width:auto;padding:6px 12px;background:var(--accent);">Call</button>`;
+    list.appendChild(div);
+  });
+}
+
+function addContact() {
+  const name = document.getElementById('newContactName').value.trim();
+  const id = document.getElementById('newContactId').value.trim();
+  if (!name || !id) return alert('Fill both!');
+  contacts.push({name, id});
+  localStorage.setItem('hangout_contacts', JSON.stringify(contacts));
+  renderContacts();
+  document.getElementById('newContactName').value = '';
+  document.getElementById('newContactId').value = '';
+}
+
+function callContact(id) {
+  document.getElementById('callTarget').value = id;
+  startCall();
+  document.getElementById('contactsModal').style.display = 'none';
+}
+
+// Media & Calls
+async function getLocalMedia() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+      audio: true
+    });
+    document.getElementById('local-video').srcObject = localStream;
+    document.getElementById('local-avatar').style.display = 'none';
+  } catch (err) {
+    console.error(err);
+    document.getElementById('local-avatar').style.display = 'flex';
+  }
+}
+
+function toggleCamera() {
+  if (!localStream) return;
+  const track = localStream.getVideoTracks()[0];
+  if (track) {
+    track.enabled = !track.enabled;
+    document.getElementById('local-avatar').style.display = track.enabled ? 'none' : 'flex';
+    document.getElementById('camBtn').className = `control-btn ${track.enabled ? 'cam-on' : 'cam-off'}`;
+  }
+}
+
+function toggleMute() {
+  if (localStream) localStream.getAudioTracks()[0].enabled = !localStream.getAudioTracks()[0].enabled;
+}
+
+function initPeer() {
+  peer = new Peer(myPeerId, {
+    debug: 3,
+    config: { iceServers: [{urls:'stun:stun.l.google.com:19302'}] }
+  });
+
+  peer.on('open', () => getLocalMedia());
+  peer.on('call', call => {
+    document.getElementById('callerName').textContent = call.peer;
+    document.getElementById('incoming').style.display = 'flex';
+    currentCall = call;
+  });
+}
+
+async function startCall() {
+  const target = document.getElementById('callTarget').value.trim();
+  if (!target) return alert("Enter ID bro");
+  if (!localStream) await getLocalMedia();
+  const call = peer.call(target, localStream);
+  currentCall = call;
+  call.on('stream', stream => {
+    document.getElementById('placeholder').style.display = 'none';
+    addRemoteVideo(target, stream);
+  });
+  call.on('close', resetCall);
+}
+
+function addRemoteVideo(id, stream) {
+  let tile = document.getElementById(`tile-${id}`);
+  if (tile) tile.remove();
+  tile = document.createElement('div');
+  tile.className = 'video-tile';
+  tile.id = `tile-${id}`;
+  const vid = document.createElement('video');
+  vid.autoplay = vid.playsinline = true;
+  vid.srcObject = stream;
+  tile.appendChild(vid);
+  document.getElementById('video-area').appendChild(tile);
+  document.getElementById('placeholder').style.display = 'none';
+}
+
+window.acceptCall = async () => {
+  if (!currentCall || !localStream) await getLocalMedia();
+  currentCall.answer(localStream);
+  currentCall.on('stream', stream => addRemoteVideo(currentCall.peer, stream));
+  document.getElementById('incoming').style.display = 'none';
+  document.getElementById('placeholder').style.display = 'none';
+};
+
+window.declineCall = () => {
+  currentCall?.close();
+  document.getElementById('incoming').style.display = 'none';
+};
+
+function resetCall() {
+  currentCall?.close();
+  currentCall = null;
+  document.getElementById('placeholder').style.display = 'flex';
+  document.querySelectorAll('.video-tile').forEach(t => {
+    if (t.id !== 'local-tile') t.remove();
+  });
+}
+
+// Start
+initPeer();
+</script>
+</body>
+</html>
